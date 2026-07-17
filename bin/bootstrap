@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+backup_root=""
+timestamp="$(date +%Y%m%d-%H%M%S)"
+
+sources=(
+  "$repo_dir/zsh/.zshenv"
+  "$repo_dir/zsh/.zprofile"
+  "$repo_dir/zsh/.zshrc"
+  "$repo_dir/starship/starship.toml"
+)
+targets=(
+  "$HOME/.zshenv"
+  "$HOME/.zprofile"
+  "$HOME/.zshrc"
+  "$HOME/.config/starship/starship.toml"
+)
+relative_targets=(
+  ".zshenv"
+  ".zprofile"
+  ".zshrc"
+  ".config/starship/starship.toml"
+)
+
+for index in 0 1 2 3; do
+  source_path="${sources[$index]}"
+  target_path="${targets[$index]}"
+  relative_target="${relative_targets[$index]}"
+
+  if [[ -L "$target_path" && "$(readlink "$target_path")" == "$source_path" ]]; then
+    printf 'ok: %s\n' "$target_path"
+    continue
+  fi
+
+  if [[ -e "$target_path" || -L "$target_path" ]]; then
+    if [[ -z "$backup_root" ]]; then
+      backup_root="$HOME/.dotfiles-backups/$timestamp"
+    fi
+    backup_path="$backup_root/$relative_target"
+    mkdir -p -- "$(dirname -- "$backup_path")"
+    mv -- "$target_path" "$backup_path"
+    printf 'backed up: %s -> %s\n' "$target_path" "$backup_path"
+  fi
+
+  mkdir -p -- "$(dirname -- "$target_path")"
+  ln -s -- "$source_path" "$target_path"
+  printf 'linked: %s -> %s\n' "$target_path" "$source_path"
+done
+
+if [[ -n "$backup_root" ]]; then
+  printf 'backup: %s\n' "$backup_root"
+fi
+
+"$repo_dir/bin/check"

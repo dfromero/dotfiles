@@ -1,0 +1,10 @@
+.DS_Store
+*.swp
+*.tmp
+*.log
+.cache/
+backups/
+local.zsh
+*.local.zsh
+*secret*
+*credentials*

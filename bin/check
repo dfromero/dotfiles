@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+failures=0
+
+pass() { printf 'pass: %s\n' "$1"; }
+warn() { printf 'warn: %s\n' "$1" >&2; }
+fail() {
+  printf 'fail: %s\n' "$1" >&2
+  failures=$((failures + 1))
+}
+
+sources=(
+  "$repo_dir/zsh/.zshenv"
+  "$repo_dir/zsh/.zprofile"
+  "$repo_dir/zsh/.zshrc"
+  "$repo_dir/starship/starship.toml"
+)
+targets=(
+  "$HOME/.zshenv"
+  "$HOME/.zprofile"
+  "$HOME/.zshrc"
+  "$HOME/.config/starship/starship.toml"
+)
+
+for index in 0 1 2 3; do
+  if [[ -L "${targets[$index]}" && "$(readlink "${targets[$index]}")" == "${sources[$index]}" ]]; then
+    pass "${targets[$index]} points to the repository"
+  else
+    fail "${targets[$index]} is not the expected symlink"
+  fi
+done
+
+if ! command -v zsh >/dev/null 2>&1; then
+  fail 'zsh is not installed'
+else
+  syntax_failed=0
+  while IFS= read -r zsh_file; do
+    if ! zsh -n "$zsh_file"; then
+      syntax_failed=1
+    fi
+  done < <(find "$repo_dir/zsh" -type f \( -name '*.zsh' -o -name '.zshenv' -o -name '.zprofile' -o -name '.zshrc' \) -print | sort)
+  if [[ "$syntax_failed" -eq 0 ]]; then
+    pass 'Zsh syntax'
+  else
+    fail 'Zsh syntax'
+  fi
+
+  startup_output="$(TERM=xterm-256color zsh -lic exit 2>&1)" || fail 'login shell startup'
+  if [[ -n "$startup_output" ]]; then
+    fail "login shell emitted output: $startup_output"
+  else
+    pass 'quiet login shell startup'
+  fi
+
+  path_output="$(TERM=xterm-256color zsh -lic 'print -rl -- "${path[@]}"' 2>/dev/null)" || path_output=""
+  duplicate_paths="$(printf '%s\n' "$path_output" | awk 'NF { count[$0]++ } END { for (entry in count) if (count[entry] > 1) print entry }')"
+  if [[ -n "$duplicate_paths" ]]; then
+    fail "duplicate PATH entries: $duplicate_paths"
+  else
+    pass 'PATH entries are unique'
+  fi
+fi
+
+if command -v starship >/dev/null 2>&1; then
+  if STARSHIP_CONFIG="$repo_dir/starship/starship.toml" starship print-config >/dev/null; then
+    pass 'Starship configuration'
+  else
+    fail 'Starship configuration'
+  fi
+else
+  warn 'starship is not installed; skipped prompt validation'
+fi
+
+for optional_command in brew eza bat fd fzf zoxide pyenv rbenv carapace codex yazi; do
+  if ! command -v "$optional_command" >/dev/null 2>&1; then
+    warn "$optional_command is not installed"
+  fi
+done
+
+if [[ -e "$HOME/.zsh_secrets" ]]; then
+  if secret_mode="$(stat -f '%Lp' "$HOME/.zsh_secrets" 2>/dev/null)"; then
+    :
+  else
+    secret_mode="$(stat -c '%a' "$HOME/.zsh_secrets" 2>/dev/null || true)"
+  fi
+  if [[ "$secret_mode" == 600 ]]; then
+    pass '~/.zsh_secrets permissions are 600'
+  else
+    warn "~/.zsh_secrets permissions are ${secret_mode:-unknown}; expected 600"
+  fi
+fi
+
+if [[ "$failures" -ne 0 ]]; then
+  printf '%d check(s) failed\n' "$failures" >&2
+  exit 1
+fi
+
+printf 'all required checks passed\n'
