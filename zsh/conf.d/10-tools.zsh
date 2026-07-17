@@ -15,9 +15,12 @@ agent() {
 _load_nvm() {
   [[ "$_NVM_LAZY_LOADED" == 1 ]] && return 0
   [[ -s "$NVM_DIR/nvm.sh" ]] || return 1
-  source "$NVM_DIR/nvm.sh" --no-use
-  [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
   typeset -g _NVM_LAZY_LOADED=1
+  if ! source "$NVM_DIR/nvm.sh" --no-use; then
+    typeset -g _NVM_LAZY_LOADED=0
+    return 1
+  fi
+  unfunction node npm npx pnpm yarn corepack 2>/dev/null || true
 }
 
 nvm() {
@@ -26,7 +29,7 @@ nvm() {
 }
 
 for nvm_command in node npm npx pnpm yarn corepack; do
-  eval "${nvm_command}() { _load_nvm || return \$?; command ${nvm_command} \"\$@\"; }"
+  eval "${nvm_command}() { _load_nvm || return \$?; load-nvmrc; command ${nvm_command} \"\$@\"; }"
 done
 unset nvm_command
 

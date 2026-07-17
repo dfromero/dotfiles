@@ -18,11 +18,10 @@ load-nvmrc() {
   if [[ "$(nvm version "$node_version")" == N/A ]]; then
     nvm install "$node_version"
   fi
-  nvm use "$node_version" >/dev/null
+  nvm use "$node_version" >/dev/null 2>&1
 }
 
 add-zsh-hook chpwd load-nvmrc
-load-nvmrc
 
 z() {
   local directory
